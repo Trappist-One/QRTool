@@ -5,9 +5,12 @@ import com.hkfs.utils.QRCodeUtil;
 
 import javax.swing.*;
 import javax.swing.border.LineBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -21,7 +24,11 @@ import java.util.concurrent.ThreadFactory;
  */
 public class Main extends JFrame {
 
+    private static String VERSION = "1.0.0";
+
     private static String URL_PREFIX = "";
+
+    private static String QR_DICT = "qrcode";
 
     private ExecutorService service = Executors.newCachedThreadPool(new ThreadFactory() {
         @Override
@@ -58,12 +65,42 @@ public class Main extends JFrame {
         savePathField.setBounds(new Rectangle(100, 50, 300, 25));
         this.add(savePathField);
 
+        excelPathField.getDocument().addDocumentListener(new DocumentListener() {
+
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                String savePathFieldText = excelPathField.getText();
+                if (savePathFieldText != null && !"".equals(savePathFieldText)) {
+                    savePathFieldText = savePathFieldText.substring(0, savePathFieldText.lastIndexOf(File.separator) + 1) + QR_DICT;
+                    savePathField.setText(savePathFieldText);
+                }
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                String savePathFieldText = excelPathField.getText();
+                if (savePathFieldText != null && !"".equals(savePathFieldText)) {
+                    savePathFieldText = savePathFieldText.substring(0, savePathFieldText.lastIndexOf(File.separator) + 1) + QR_DICT;
+                    savePathField.setText(savePathFieldText);
+                }
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                String savePathFieldText = excelPathField.getText();
+                if (savePathFieldText != null && !"".equals(savePathFieldText)) {
+                    savePathFieldText = savePathFieldText.substring(0, savePathFieldText.lastIndexOf(File.separator) + 1) + QR_DICT;
+                    savePathField.setText(savePathFieldText);
+                }
+            }
+        });
+
         JLabel urlPathLabel = new JLabel("链接前缀：");
         urlPathLabel.setBounds(new Rectangle(20, 80, 70, 25));
         this.add(urlPathLabel);
         JTextField urlPathField = new JTextField(30);
         urlPathField.setBounds(new Rectangle(100, 80, 300, 25));
-        urlPathField.setText("");
+        urlPathField.setText(URL_PREFIX);
         this.add(urlPathField);
 
         JButton button = new JButton("生成");
@@ -80,10 +117,19 @@ public class Main extends JFrame {
         jTextArea.setEditable(false);
         jScrollPane.setViewportView(jTextArea);
         this.add(jScrollPane);
+
+        //版本号
+        JLabel versionLabel = new JLabel("当前版本：" + VERSION);
+        versionLabel.setFont(new Font("Microsoft YaHei", Font.PLAIN ,10));
+        versionLabel.setBounds(new Rectangle(350, 250, 100, 20));
+        this.add(versionLabel);
+
+
         this.setVisible(true);
+        this.setResizable(false);
 
         button.addActionListener(e -> {
-            service.submit(()->{
+            service.submit(() -> {
                 button.setEnabled(false);
                 String excelPathFieldText = excelPathField.getText();
                 String savePathFieldText = savePathField.getText();
@@ -102,11 +148,17 @@ public class Main extends JFrame {
                 }
 
                 if (result == null) {
+                    excelPathFieldText = excelPathFieldText.replace("\\", File.separator);
+                    savePathFieldText = savePathFieldText.replace("\\", File.separator);
+
+                    if (savePathFieldText == null || "".equals(savePathFieldText)) {
+                        savePathFieldText = excelPathFieldText.substring(0, excelPathFieldText.lastIndexOf(File.separator) + 1) + "qrcode";
+                    }
                     result = createQRCode(excelPathFieldText, savePathFieldText, jTextArea);
                 }
 
                 if (result == null) {
-                    jTextArea.append("\n" +"完成！");
+                    jTextArea.append("\n" + "完成！");
                 } else {
                     jTextArea.append(result);
                 }
@@ -121,12 +173,23 @@ public class Main extends JFrame {
         String result = null;
         File f = new File(filePath);
         List<Map<String, Object>> list = null;
+        FileInputStream fis = null;
         try {
+            fis = new FileInputStream(f);
             jTextArea.setText("解析文件开始...");
-            list = ExcelUtil.readeExcelData(new FileInputStream(f), 0, 0, 1);
+            list = ExcelUtil.readeExcelData(fis, 0, 0, 1);
             jTextArea.append("\n" + "解析文件完成.");
         } catch (Exception e) {
-            result = "\n解析文件失败！";
+            result = "\n解析文件失败！失败原因：\n" + e.toString();
+            return result;
+        } finally {
+            if (fis != null) {
+                try {
+                    fis.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         }
         try {
             jTextArea.append("\n" + "生成二维码开始...");
@@ -137,11 +200,11 @@ public class Main extends JFrame {
                 String name = (String) map.get("姓名");
                 String text = URL_PREFIX + agentNo;
                 QRCodeUtil.encode(text, null, savePath, agentNo + "_" + name, true);
-                jTextArea.append("\n已完成" + (i + 1) +"/" + size);
+                jTextArea.append("\n已完成" + (i + 1) + "/" + size);
 
             }
         } catch (Exception e) {
-            result = "\n生成二维码失败！";
+            result = "\n生成二维码失败！失败原因：\n " + e.toString();
         }
 
         return result;
